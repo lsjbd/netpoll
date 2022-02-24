@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build (darwin || netbsd || freebsd || openbsd || dragonfly) && !race
 // +build darwin netbsd freebsd openbsd dragonfly
 // +build !race
 
@@ -82,19 +83,19 @@ func (p *defaultPoll) Wait() error {
 			if !operator.do() {
 				continue
 			}
-			switch {
-			case events[i].Flags&syscall.EV_EOF != 0:
+			if events[i].Flags&syscall.EV_EOF != 0 {
 				hups = append(hups, operator)
-			case events[i].Filter == syscall.EVFILT_READ && events[i].Flags&syscall.EV_ENABLE != 0:
+			}
+			if events[i].Filter == syscall.EVFILT_READ && events[i].Flags&syscall.EV_ENABLE != 0 {
 				// for non-connection
 				if operator.OnRead != nil {
 					operator.OnRead(p)
-					break
+					goto END
 				}
 				// only for connection
 				var bs = operator.Inputs(barriers[i].bs)
 				if len(bs) == 0 {
-					break
+					goto END
 				}
 				var n, err = readv(operator.FD, bs, barriers[i].ivs)
 				operator.InputAck(n)
@@ -102,16 +103,17 @@ func (p *defaultPoll) Wait() error {
 					log.Printf("readv(fd=%d) failed: %s", operator.FD, err.Error())
 					hups = append(hups, operator)
 				}
-			case events[i].Filter == syscall.EVFILT_WRITE && events[i].Flags&syscall.EV_ENABLE != 0:
+			}
+			if events[i].Filter == syscall.EVFILT_WRITE && events[i].Flags&syscall.EV_ENABLE != 0 {
 				// for non-connection
 				if operator.OnWrite != nil {
 					operator.OnWrite(p)
-					break
+					goto END
 				}
 				// only for connection
 				var bs, supportZeroCopy = operator.Outputs(barriers[i].bs)
 				if len(bs) == 0 {
-					break
+					goto END
 				}
 				// TODO: Let the upper layer pass in whether to use ZeroCopy.
 				var n, err = sendmsg(operator.FD, bs, barriers[i].ivs, false && supportZeroCopy)
@@ -121,6 +123,7 @@ func (p *defaultPoll) Wait() error {
 					hups = append(hups, operator)
 				}
 			}
+		END:
 			operator.done()
 		}
 		// hup conns together to avoid blocking the poll.
