@@ -61,9 +61,9 @@ func (op *FDOperator) done() {
 
 func (op *FDOperator) inuse() {
 	for !atomic.CompareAndSwapInt32(&op.state, 0, 1) {
-		if atomic.LoadInt32(&op.state) == 1 {
-			return
-		}
+		//if atomic.LoadInt32(&op.state) == 1 {
+		//	return
+		//}
 		runtime.Gosched()
 	}
 }

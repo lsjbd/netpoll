@@ -15,6 +15,7 @@
 package netpoll
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -337,6 +338,15 @@ func (c *connection) initNetFD(conn Conn) {
 
 func (c *connection) initFDOperator() {
 	op := allocop()
+	if atomic.LoadInt32(&c.operator.state) != 0 {
+		var onConnect, _ = c.onConnectCallback.Load().(OnConnect)
+		var onRequest, _ = c.onRequestCallback.Load().(OnRequest)
+		hasHandler := onConnect != nil || onRequest != nil
+		fmt.Printf("ERROR: op is using by allocop[%d], closed[%d], processing[%d], poll[%t], handler[%t]\n",
+			atomic.LoadInt32(&c.operator.state), atomic.LoadInt32(&c.keychain[closing]),
+			atomic.LoadInt32(&c.keychain[processing]),
+			c.operator.poll != nil, hasHandler)
+	}
 	op.FD = c.fd
 	op.OnRead, op.OnWrite, op.OnHup = nil, nil, c.onHup
 	op.Inputs, op.InputAck = c.inputs, c.inputAck
@@ -354,6 +364,16 @@ func (c *connection) initFinalizer() {
 		c.stop(flushing)
 		c.netFD.Close()
 		c.closeBuffer()
+		if !c.operator.isUnused() {
+			var onConnect, _ = c.onConnectCallback.Load().(OnConnect)
+			var onRequest, _ = c.onRequestCallback.Load().(OnRequest)
+			hasHandler := onConnect != nil || onRequest != nil
+			fmt.Printf("ERROR: op is using by freeop[%d], closed[%d], processing[%d], poll[%t], handler[%t]\n",
+				atomic.LoadInt32(&c.operator.state), atomic.LoadInt32(&c.keychain[closing]),
+				atomic.LoadInt32(&c.keychain[processing]),
+				c.operator.poll != nil, hasHandler)
+			panic("op is using now")
+		}
 		freeop(c.operator)
 		return nil
 	})
