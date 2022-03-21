@@ -338,15 +338,6 @@ func (c *connection) initNetFD(conn Conn) {
 
 func (c *connection) initFDOperator() {
 	op := allocop()
-	if atomic.LoadInt32(&c.operator.state) != 0 {
-		var onConnect, _ = c.onConnectCallback.Load().(OnConnect)
-		var onRequest, _ = c.onRequestCallback.Load().(OnRequest)
-		hasHandler := onConnect != nil || onRequest != nil
-		fmt.Printf("ERROR: op is using by allocop[%d], closed[%d], processing[%d], poll[%t], handler[%t]\n",
-			atomic.LoadInt32(&c.operator.state), atomic.LoadInt32(&c.keychain[closing]),
-			atomic.LoadInt32(&c.keychain[processing]),
-			c.operator.poll != nil, hasHandler)
-	}
 	op.FD = c.fd
 	op.OnRead, op.OnWrite, op.OnHup = nil, nil, c.onHup
 	op.Inputs, op.InputAck = c.inputs, c.inputAck
@@ -357,6 +348,15 @@ func (c *connection) initFDOperator() {
 		op.poll = c.pd.operator.poll
 	}
 	c.operator = op
+	if st := atomic.LoadInt32(&op.state); st != 0 {
+		var onConnect, _ = c.onConnectCallback.Load().(OnConnect)
+		var onRequest, _ = c.onRequestCallback.Load().(OnRequest)
+		hasHandler := onConnect != nil || onRequest != nil
+		fmt.Printf("ERROR: op is using by allocop[%d], closed[%d], processing[%d], poll[%t], handler[%t]\n",
+			st, atomic.LoadInt32(&c.keychain[closing]),
+			atomic.LoadInt32(&c.keychain[processing]),
+			c.operator.poll != nil, hasHandler)
+	}
 }
 
 func (c *connection) initFinalizer() {
