@@ -124,7 +124,7 @@ func (c *connection) onConnect() {
 				return true
 			}
 			// check for onRequest
-			return onRequest != nil && c.Reader().Len() > 0 && c.IsActive()
+			return onRequest != nil && c.Reader().Len() > 0
 		},
 		func(c *connection) {
 			if atomic.CompareAndSwapInt32(&connected, 0, 1) {
@@ -147,7 +147,7 @@ func (c *connection) onRequest() (needTrigger bool) {
 	processed := c.onProcess(
 		// only process when conn active and have unread data
 		func(c *connection) bool {
-			return c.Reader().Len() > 0 && c.IsActive()
+			return c.Reader().Len() > 0
 		},
 		func(c *connection) {
 			_ = onRequest(c.ctx, c)
@@ -173,6 +173,9 @@ func (c *connection) onProcess(isProcessable func(c *connection) bool, process f
 		// Single request processing, blocking allowed.
 		for isProcessable(c) {
 			process(c)
+			if !c.IsActive() {
+				break
+			}
 		}
 		// Handling callback if connection has been closed.
 		if !c.IsActive() {
